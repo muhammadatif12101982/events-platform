@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Orders.Api.Entities;
+using Orders.Api.Domain;
 
 namespace Orders.Api.Features.Orders;
 
@@ -15,6 +16,15 @@ public static class CreateOrder
         var customerExists = await db.Customers.AnyAsync(c => c.Id == request.CustomerId);
         if (!customerExists)
             return Results.NotFound($"Customer {request.CustomerId} not found.");
+
+        var validationItems = request.Items.Select(i =>
+            new OrderCalculations.OrderLineItem(i.ProductId, i.Quantity, 0m)).ToList();
+
+        if (!OrderCalculations.HasValidQuantities(validationItems))
+            return Results.BadRequest("All item quantities must be greater than zero.");
+
+        if (OrderCalculations.HasDuplicateProducts(validationItems))
+            return Results.BadRequest("Duplicate products in order. Combine quantities instead.");
 
         // Validate all products exist and have stock
         var productIds = request.Items.Select(i => i.ProductId).ToList();
@@ -46,7 +56,15 @@ public static class CreateOrder
         db.Orders.Add(order);
         await db.SaveChangesAsync();
 
-        var total = orderItems.Sum(i => i.UnitPrice * i.Quantity);
+        // Replace this:
+        //var total = orderItems.Sum(i => i.UnitPrice * i.Quantity);
+
+        // With this:
+        var lineItems = orderItems.Select(i =>
+            new OrderCalculations.OrderLineItem(i.ProductId, i.Quantity, i.UnitPrice));
+        
+        var total = OrderCalculations.CalculateTotal(lineItems);
+
         return Results.Created($"/orders/{order.Id}",
             new Response(order.Id, order.Status.ToString(), total, order.CreatedAt));
     }

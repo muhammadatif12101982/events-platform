@@ -3,4 +3,7 @@
   <Folder Name="/src/Orders/">
     <Project Path="src/Orders/Orders.Api/Orders.Api.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Orders.UnitTests/Orders.UnitTests.csproj" />
+  </Folder>
 </Solution>
