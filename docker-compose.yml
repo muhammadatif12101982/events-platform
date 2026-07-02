@@ -10,6 +10,25 @@ services:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eventsuser -d eventsdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  orders-api:
+    build:
+      context: .
+      dockerfile: src/Orders/Orders.Api/Dockerfile
+    container_name: events-orders-api
+    ports:
+      - "8080:8080"
+    environment:
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=eventsdb;Username=eventsuser;Password=eventspass
+      - ASPNETCORE_ENVIRONMENT=Development
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 volumes:
   postgres-data:
