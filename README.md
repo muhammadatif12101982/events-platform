@@ -1,4 +1,5 @@
 # Events Platform
+![CI](https://github.com/muhammadatif12101982/events-platform/actions/workflows/ci.yml/badge.svg)
 
 A microservices learning project covering .NET 10, RabbitMQ messaging, 
 OpenTelemetry observability, CQRS, and Azure deployment.
