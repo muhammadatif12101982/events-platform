@@ -1,0 +1,12 @@
+using Microsoft.AspNetCore.SignalR;
+
+namespace Orders.Api.Entities;
+
+public class Customer
+{
+    public int id {get; set;}
+    public required string FullName {get; set;}
+    public required string Email  {get; set;}
+    public DateTime CreatedAt  {get; set;} = DateTime.UtcNow;
+    public ICollection<Order> Orders  {get; set;} = [];
+}
