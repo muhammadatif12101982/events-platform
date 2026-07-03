@@ -1,5 +1,8 @@
 <Solution>
   <Folder Name="/src/" />
+  <Folder Name="/src/Identity/">
+    <Project Path="src/Identity/Identity.Server/Identity.Server.csproj" />
+  </Folder>
   <Folder Name="/src/Orders/">
     <Project Path="src/Orders/Orders.Api/Orders.Api.csproj" />
   </Folder>
