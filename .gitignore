@@ -480,3 +480,6 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# User secrets (should already be outside repo, but just in case)
+**/secrets.json
