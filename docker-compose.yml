@@ -16,6 +16,16 @@ services:
       timeout: 5s
       retries: 5
 
+  identity-server:
+    build:
+      context: .
+      dockerfile: src/Identity/Identity.Server/Dockerfile
+    container_name: events-identity
+    ports:
+      - "5001:5001"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+
   orders-api:
     build:
       context: .
@@ -26,9 +36,25 @@ services:
     environment:
       - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=eventsdb;Username=eventsuser;Password=eventspass
       - ASPNETCORE_ENVIRONMENT=Development
+      - IdentityServer__Authority=http://identity-server:5001
     depends_on:
       postgres:
         condition: service_healthy
+
+  gateway:
+    build:
+      context: .
+      dockerfile: src/Gateway/Gateway.Api/Dockerfile
+    container_name: events-gateway
+    ports:
+      - "5000:5000"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - IdentityServer__Authority=http://identity-server:5001
+      - ReverseProxy__Clusters__orders-cluster__Destinations__orders-api__Address=http://orders-api:8080
+    depends_on:
+      - identity-server
+      - orders-api
 
 volumes:
   postgres-data:

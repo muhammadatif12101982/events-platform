@@ -15,6 +15,15 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
     // Allow HTTP in development (no TLS yet)
     options.RequireHttpsMetadata = false;
+
+    options.TokenValidationParameters = new()
+        {
+            ValidIssuers =
+            [
+                "http://identity-server:5001",
+                "http://localhost:5001"
+            ]
+        };
 });
 
 builder.Services.AddAuthorization();

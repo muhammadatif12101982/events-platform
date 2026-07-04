@@ -35,6 +35,15 @@ public static class Config
                 // Client credentials = no user involved, service-to-service auth
                 AllowedGrantTypes = GrantTypes.ClientCredentials,
                 AllowedScopes = {"orders.read", "orders.write"}
+            },
+            // Read-only client — can only read, not write
+            new Client
+            {
+                ClientId      = "readonly-client",
+                ClientName    = "Read Only Client",
+                ClientSecrets = { new Secret("readonly-secret".Sha256()) },
+                AllowedGrantTypes = GrantTypes.ClientCredentials,
+                AllowedScopes     = { "orders.read" }   // no orders.write
             }
         ];
 }
