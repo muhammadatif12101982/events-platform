@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Orders.Api.Entities;
 using Orders.Api.Domain;
+using System.Text.Json;
+using Orders.Api.Domain.Events;
 
 namespace Orders.Api.Features.Orders;
 
@@ -47,23 +49,47 @@ public static class CreateOrder
             };
         }).ToList();
 
+        // Calculate total BEFORE using it in the outbox event
+        var lineItems = orderItems
+            .Select(i => new OrderCalculations.OrderLineItem(i.ProductId, i.Quantity, i.UnitPrice));
+        var total = OrderCalculations.CalculateTotal(lineItems);
+
         var order = new Order
         {
             CustomerId = request.CustomerId,
             Items = orderItems
         };
-
         db.Orders.Add(order);
+
+        // Write outbox message in the SAME transaction as the order
+        // This guarantees either both succeed or both fail — no dual-write problem
+        var domainEvent = new OrderCreatedEvent(
+            OrderId: 0, // will be set after SaveChanges
+            CustomerId: order.CustomerId,
+            Total: total,
+            CreatedAt: order.CreatedAt,
+            Items: orderItems.Select(i => new OrderCreatedEvent.OrderItem(
+                i.ProductId,
+                products.First(p => p.Id == i.ProductId).Name,
+                i.Quantity,
+                i.UnitPrice)).ToList()
+        );
+
+        var outboxMessage = new OutboxMessage
+        {
+            EventType = nameof(OrderCreatedEvent),
+            Payload = JsonSerializer.Serialize(domainEvent)
+        };
+        db.OutboxMessages.Add(outboxMessage);
+
+        await db.SaveChangesAsync();
+
+        // Update the event with the real OrderId now that we have it
+        outboxMessage.Payload = JsonSerializer.Serialize(domainEvent with { OrderId = order.Id });
         await db.SaveChangesAsync();
 
         // Replace this:
         //var total = orderItems.Sum(i => i.UnitPrice * i.Quantity);
-
-        // With this:
-        var lineItems = orderItems.Select(i =>
-            new OrderCalculations.OrderLineItem(i.ProductId, i.Quantity, i.UnitPrice));
-        
-        var total = OrderCalculations.CalculateTotal(lineItems);
 
         return Results.Created($"/orders/{order.Id}",
             new Response(order.Id, order.Status.ToString(), total, order.CreatedAt));

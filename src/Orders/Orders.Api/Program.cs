@@ -4,6 +4,7 @@ using Orders.Api.Features.Orders;
 using Orders.Api.Features.Products;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Orders.Api.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -44,6 +45,19 @@ builder.Services.AddAuthorization(options =>
     // Require write scope for POST/PUT/DELETE endpoints
     options.AddPolicy("orders.write", policy => policy.RequireClaim("scope", "orders.write"));
 });
+
+// ── RabbitMQ Settings ──────────────────────────────────────────────
+var rabbitSettings = builder.Configuration
+    .GetSection("RabbitMQ")
+    .Get<RabbitMqSettings>() ?? new RabbitMqSettings
+    {
+        Host = "localhost",
+        Username = "eventsuser",
+        Password = "eventspass"
+    };
+
+builder.Services.AddSingleton(rabbitSettings);
+builder.Services.AddHostedService<OutboxPublisher>();
 
 var app = builder.Build();
 

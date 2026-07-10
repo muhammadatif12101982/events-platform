@@ -26,6 +26,21 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
 
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: events-rabbitmq
+    ports:
+      - "5672:5672"    # AMQP protocol port (services connect here)
+      - "15672:15672"  # Management UI (browser)
+    environment:
+      RABBITMQ_DEFAULT_USER: eventsuser
+      RABBITMQ_DEFAULT_PASS: eventspass
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   orders-api:
     build:
       context: .
@@ -37,8 +52,13 @@ services:
       - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=eventsdb;Username=eventsuser;Password=eventspass
       - ASPNETCORE_ENVIRONMENT=Development
       - IdentityServer__Authority=http://identity-server:5001
+      - RabbitMQ__Host=rabbitmq
+      - RabbitMQ__Username=eventsuser
+      - RabbitMQ__Password=eventspass
     depends_on:
       postgres:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
 
   gateway:

@@ -10,6 +10,7 @@ public class OrdersDbContext(DbContextOptions<OrdersDbContext> options)
     public DbSet<Product> Products => Set<Product>();
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
+    public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -24,5 +25,8 @@ public class OrdersDbContext(DbContextOptions<OrdersDbContext> options)
         modelBuilder.Entity<Order>()
             .Property(o => o.Status)
             .HasConversion<string>();
+        
+        modelBuilder.Entity<OutboxMessage>()
+            .HasIndex(o => o.ProcessedAt);
     }
 }
