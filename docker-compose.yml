@@ -76,5 +76,18 @@ services:
       - identity-server
       - orders-api
 
+  notification-worker:
+    build:
+      context: .
+      dockerfile: src/NotificationWorker/NotificationWorker/Dockerfile
+    container_name: events-notification-worker
+    environment:
+      - RabbitMQ__Host=rabbitmq
+      - RabbitMQ__Username=eventsuser
+      - RabbitMQ__Password=eventspass
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
 volumes:
   postgres-data:
