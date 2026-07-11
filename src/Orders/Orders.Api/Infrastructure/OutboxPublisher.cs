@@ -49,6 +49,7 @@ public class OutboxPublisher(
         var factory = new ConnectionFactory
         {
             HostName = settings.Host,
+            Port     = settings.Port,
             UserName = settings.Username,
             Password = settings.Password
         };
