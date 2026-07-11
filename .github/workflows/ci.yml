@@ -27,4 +27,13 @@ jobs:
         run: dotnet build --no-restore --configuration Release
 
       - name: Run unit tests
-        run: dotnet test tests/Orders.UnitTests/Orders.UnitTests.csproj --no-build --configuration Release --verbosity normal
+        run: dotnet test tests/Orders.UnitTests/Orders.UnitTests.csproj \
+          --no-build \
+          --configuration Release \
+          --verbosity normal
+
+      - name: Run integration tests
+        run: dotnet test tests/Orders.IntegrationTests/Orders.IntegrationTests.csproj \
+          --no-build \
+          --configuration Release \
+          --verbosity normal
