@@ -38,6 +38,50 @@ Internet/Client          │  ┌───────────────�
                          │  Coming: Notification Worker + RabbitMQ     │
                          └─────────────────────────────────────────────┘
 ```
+```mermaid
+graph TB
+    Client(["🌐 Client"])
+
+    subgraph Docker["Docker Compose Network"]
+        direction TB
+
+        subgraph Auth["Identity Layer"]
+            IS["🔐 Identity Server\nport 5001\nDuende IdentityServer\nJWT Issuance"]
+        end
+
+        subgraph Gateway["Gateway Layer"]
+            GW["🚪 Gateway\nport 5000\nYARP Reverse Proxy\nJWT Validation"]
+        end
+
+        subgraph Domain["Domain Layer"]
+            OA["📦 Orders API\nport 8080\nMinimal API\nEF Core + CQRS\nOutbox Pattern"]
+        end
+
+        subgraph Messaging["Messaging Layer"]
+            RMQ["🐇 RabbitMQ\nport 5672\nTopic Exchange\nevents-platform"]
+            NW["📧 Notification Worker\nRabbitMQ Consumer\nIdempotent Processing"]
+        end
+
+        subgraph Data["Data Layer"]
+            PG[("🐘 PostgreSQL\nport 5432\nOrders + Outbox")]
+        end
+    end
+
+    Client -->|"POST /connect/token"| IS
+    IS -->|"JWT"| Client
+    Client -->|"Bearer JWT"| GW
+    GW -->|"Validates JWT\nProxies request"| OA
+    OA -->|"Reads/Writes"| PG
+    OA -->|"Outbox → Publish"| RMQ
+    RMQ -->|"Consumes events"| NW
+
+    style Docker fill:#f8fafc,stroke:#e2e8f0
+    style Auth fill:#fef3c7,stroke:#fcd34d
+    style Gateway fill:#ede9fe,stroke:#c4b5fd
+    style Domain fill:#dbeafe,stroke:#93c5fd
+    style Messaging fill:#fce7f3,stroke:#f9a8d4
+    style Data fill:#dcfce7,stroke:#86efac
+```
 
 ## Services
 
