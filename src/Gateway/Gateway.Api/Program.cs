@@ -1,22 +1,18 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ── JWT Bearer Authentication ──────────────────────────────────────
-// Validates tokens issued by our IdentityServer
+// ── Authentication ─────────────────────────────────────────────────
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-.AddJwtBearer(options =>
-{
-    // Where to find the signing keys (IdentityServer's discovery endpoint)
-    options.Authority = builder.Configuration["IdentityServer:Authority"];
-
-    // The audience this gateway expects in incoming tokens
-    options.Audience = "orders-api";
-
-    // Allow HTTP in development (no TLS yet)
-    options.RequireHttpsMetadata = false;
-
-    options.TokenValidationParameters = new()
+    .AddJwtBearer(options =>
+    {
+        options.Authority = builder.Configuration["IdentityServer:Authority"];
+        options.Audience  = "orders-api";
+        options.RequireHttpsMetadata = false;
+        options.TokenValidationParameters = new()
         {
             ValidIssuers =
             [
@@ -24,22 +20,43 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 "http://localhost:5001"
             ]
         };
-});
+    });
 
 builder.Services.AddAuthorization();
 
-// ── YARP Reverse Proxy ─────────────────────────────────────────────
-// Loads route and cluster config from appsettings.json
+// ── YARP ───────────────────────────────────────────────────────────
 builder.Services.AddReverseProxy()
-.LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"));
+    .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"));
+
+// ── OpenTelemetry ──────────────────────────────────────────────────
+builder.Services.AddOpenTelemetry()
+    .ConfigureResource(r => r.AddService(
+        serviceName:    "gateway",
+        serviceVersion: "1.0.0"))
+    .WithTracing(tracing => tracing
+        .AddAspNetCoreInstrumentation(o =>
+        {
+            o.RecordException = true;
+        })
+        .AddHttpClientInstrumentation()
+        .AddOtlpExporter(o =>
+        {
+            o.Endpoint = new Uri(
+                builder.Configuration["Otlp:Endpoint"] ?? "http://localhost:4317");
+        }))
+    .WithMetrics(metrics => metrics
+        .AddAspNetCoreInstrumentation()
+        .AddHttpClientInstrumentation()
+        .AddPrometheusExporter());
 
 var app = builder.Build();
+
 app.UseAuthentication();
 app.UseAuthorization();
 
-// All proxied routes require a valid JWT
-app.MapReverseProxy();
+// Expose /metrics endpoint for Prometheus scraping
+app.MapPrometheusScrapingEndpoint();
 
-//app.MapGet("/", () => "Hello World!");
+app.MapReverseProxy();
 
 app.Run();

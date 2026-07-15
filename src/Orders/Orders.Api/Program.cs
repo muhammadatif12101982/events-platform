@@ -1,57 +1,50 @@
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
+using OpenTelemetry.Instrumentation.EntityFrameworkCore;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 using Orders.Api;
 using Orders.Api.Features.Orders;
 using Orders.Api.Features.Products;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Authorization;
 using Orders.Api.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // ── Database ───────────────────────────────────────────────────────
-builder.Services.AddDbContext<OrdersDbContext>(options => 
-options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+builder.Services.AddDbContext<OrdersDbContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // ── Authentication ─────────────────────────────────────────────────
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-.AddJwtBearer(options =>
-{
-    // Validate tokens issued by our IdentityServer
-    options.Authority = builder.Configuration["IdentityServer:Authority"];
-
-    // This service only accepts tokens intended for orders-api
-    options.Audience = "orders-api";
-
-    // Allow HTTP in development
-    options.RequireHttpsMetadata = false;
-
-    // Accept tokens where issuer is either the internal Docker name
-    // OR localhost (when tokens fetched directly from host machine)
-    options.TokenValidationParameters = new ()
+    .AddJwtBearer(options =>
     {
-        ValidIssuers = [
-            "http://identity-server:5001",
-            "http://localhost:5001"
-        ]
-    };
-});
+        options.Authority = builder.Configuration["IdentityServer:Authority"];
+        options.Audience  = "orders-api";
+        options.RequireHttpsMetadata = false;
+        options.TokenValidationParameters = new()
+        {
+            ValidIssuers =
+            [
+                "http://identity-server:5001",
+                "http://localhost:5001"
+            ]
+        };
+    });
 
-// ── Authorization ──────────────────────────────────────────────────
 builder.Services.AddAuthorization(options =>
 {
-    // Require read scope for GET endpoints
-    options.AddPolicy("orders.read", policy => policy.RequireClaim("scope", "orders.read"));
-
-    // Require write scope for POST/PUT/DELETE endpoints
-    options.AddPolicy("orders.write", policy => policy.RequireClaim("scope", "orders.write"));
+    options.AddPolicy("orders.read",  p => p.RequireClaim("scope", "orders.read"));
+    options.AddPolicy("orders.write", p => p.RequireClaim("scope", "orders.write"));
 });
 
-// ── RabbitMQ Settings ──────────────────────────────────────────────
+// ── RabbitMQ + Outbox Publisher ────────────────────────────────────
 var rabbitSettings = builder.Configuration
     .GetSection("RabbitMQ")
     .Get<RabbitMqSettings>() ?? new RabbitMqSettings
     {
-        Host = "localhost",
+        Host     = "localhost",
         Username = "eventsuser",
         Password = "eventspass"
     };
@@ -59,27 +52,47 @@ var rabbitSettings = builder.Configuration
 builder.Services.AddSingleton(rabbitSettings);
 builder.Services.AddHostedService<OutboxPublisher>();
 
+// ── OpenTelemetry ──────────────────────────────────────────────────
+builder.Services.AddOpenTelemetry()
+    .ConfigureResource(r => r.AddService(
+        serviceName:    "orders-api",
+        serviceVersion: "1.0.0"))
+    .WithTracing(tracing => tracing
+        .AddAspNetCoreInstrumentation(o =>
+        {
+            o.RecordException = true;
+        })
+        .AddHttpClientInstrumentation()
+        .AddEntityFrameworkCoreInstrumentation()
+        .AddOtlpExporter(o =>
+        {
+            o.Endpoint = new Uri(
+                builder.Configuration["Otlp:Endpoint"] ?? "http://localhost:4317");
+        }))
+    .WithMetrics(metrics => metrics
+        .AddAspNetCoreInstrumentation()
+        .AddHttpClientInstrumentation()
+        .AddPrometheusExporter());
+
 var app = builder.Build();
 
 app.UseAuthentication();
 app.UseAuthorization();
 
-//app.MapGet("/", () => "Hello World!");
-//app.MapGet("/", () => "Orders API is running");
+// Expose /metrics for Prometheus
+app.MapPrometheusScrapingEndpoint();
 
 // ── Routes ─────────────────────────────────────────────────────────
-// Products endpoints
-app.MapPost("/products", CreateProduct.Handle)
-.RequireAuthorization("orders.write");
-
 app.MapGet("/products", ListProducts.Handle)
-.RequireAuthorization("orders.read");
+    .RequireAuthorization("orders.read");
 
-// Orders endpoints
+app.MapPost("/products", CreateProduct.Handle)
+    .RequireAuthorization("orders.write");
+
 app.MapPost("/orders", CreateOrder.Handle)
-.RequireAuthorization("orders.write");
+    .RequireAuthorization("orders.write");
 
 app.MapGet("/orders/{id:int}", GetOrder.Handle)
-.RequireAuthorization("orders.read");
+    .RequireAuthorization("orders.read");
 
 app.Run();

@@ -55,6 +55,7 @@ services:
       - RabbitMQ__Host=rabbitmq
       - RabbitMQ__Username=eventsuser
       - RabbitMQ__Password=eventspass
+      - Otlp__Endpoint=http://jaeger:4317
     depends_on:
       postgres:
         condition: service_healthy
@@ -72,6 +73,7 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - IdentityServer__Authority=http://identity-server:5001
       - ReverseProxy__Clusters__orders-cluster__Destinations__orders-api__Address=http://orders-api:8080
+      - Otlp__Endpoint=http://jaeger:4317
     depends_on:
       - identity-server
       - orders-api
@@ -85,9 +87,46 @@ services:
       - RabbitMQ__Host=rabbitmq
       - RabbitMQ__Username=eventsuser
       - RabbitMQ__Password=eventspass
+      - Otlp__Endpoint=http://jaeger:4317
     depends_on:
       rabbitmq:
         condition: service_healthy
 
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    container_name: events-jaeger
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "4317:4317"    # OTLP gRPC receiver
+      - "4318:4318"    # OTLP HTTP receiver
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: events-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: events-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
 volumes:
   postgres-data:
+  grafana-data:
