@@ -3,6 +3,9 @@ using System.Text.Json;
 using NotificationWorker.Domain;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
+using System.Diagnostics;
+using OpenTelemetry;
+using OpenTelemetry.Context.Propagation;
 
 namespace NotificationWorker;
 
@@ -10,6 +13,9 @@ public class Worker(
     RabbitMqSettings settings,
     ILogger<Worker> logger) : BackgroundService
 {
+    private static readonly ActivitySource ActivitySource = new("NotificationWorker.Consumer");
+    private static readonly TextMapPropagator Propagator = Propagators.DefaultTextMapPropagator;
+
     // Track processed event IDs for idempotency
     // In production this would be a DB table or Redis set
     private readonly HashSet<string> _processedEventIds = [];
@@ -87,18 +93,51 @@ public class Worker(
 
                 try
                 {
-                    // Idempotency check — skip if already processed
                     if (_processedEventIds.Contains(messageId))
                     {
-                        logger.LogWarning(
-                            "Duplicate message {MessageId} — skipping", messageId);
+                        logger.LogWarning("Duplicate message {MessageId} — skipping", messageId);
                         await channel.BasicAckAsync(ea.DeliveryTag, false);
                         return;
                     }
 
+                    // ── Extract trace context from AMQP headers ────────────────
+                    // Restores the trace started by the publisher so this span
+                    // appears as a child in the same distributed trace
+                    var headers = ea.BasicProperties.Headers ?? new Dictionary<string, object?>();
+                    var parentContext = Propagator.Extract(
+                        default,
+                        headers,
+                        (carrier, key) =>
+                        {
+                            if (carrier.TryGetValue(key, out var value))
+                            {
+                                if (value is byte[] bytes)
+                                    return [Encoding.UTF8.GetString(bytes)];
+                                if (value is string str)
+                                    return [str];
+                            }
+                            return [];
+                        });
+
+                    Baggage.Current = parentContext.Baggage;
+
+                    // Start a new span as a child of the publisher's span
+                    using var activity = ActivitySource.StartActivity(
+                        "notification.process",
+                        ActivityKind.Consumer,
+                        parentContext.ActivityContext);
+
+                    activity?.SetTag("messaging.system",     "rabbitmq");
+                    activity?.SetTag("messaging.message_id", messageId);
+                    activity?.SetTag("messaging.operation",  "receive");
+
                     var body = Encoding.UTF8.GetString(ea.Body.ToArray());
-                    var orderEvent = JsonSerializer.Deserialize<OrderCreatedEvent>(body,
-                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    var orderEvent = System.Text.Json.JsonSerializer.Deserialize<Domain.OrderCreatedEvent>(
+                        body,
+                        new System.Text.Json.JsonSerializerOptions
+                        {
+                            PropertyNameCaseInsensitive = true
+                        });
 
                     if (orderEvent == null)
                     {
@@ -107,21 +146,14 @@ public class Worker(
                         return;
                     }
 
-                    // Process the notification
                     await ProcessNotificationAsync(orderEvent, messageId);
 
-                    // Mark as processed (idempotency)
                     _processedEventIds.Add(messageId);
-
-                    // Acknowledge — remove from queue
                     await channel.BasicAckAsync(ea.DeliveryTag, false);
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError(ex,
-                        "Error processing message {MessageId}", messageId);
-
-                    // Nack without requeue — goes to dead letter queue if configured
+                    logger.LogError(ex, "Error processing message {MessageId}", messageId);
                     await channel.BasicNackAsync(ea.DeliveryTag, false, requeue: false);
                 }
             };

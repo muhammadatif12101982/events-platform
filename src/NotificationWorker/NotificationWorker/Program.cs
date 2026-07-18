@@ -23,6 +23,7 @@ builder.Services.AddOpenTelemetry()
         serviceName:    "notification-worker",
         serviceVersion: "1.0.0"))
     .WithTracing(tracing => tracing
+        .AddSource("NotificationWorker.Consumer")  // ← add this
         .AddHttpClientInstrumentation()
         .AddOtlpExporter(o =>
         {

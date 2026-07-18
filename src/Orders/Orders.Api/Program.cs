@@ -9,6 +9,7 @@ using Orders.Api;
 using Orders.Api.Features.Orders;
 using Orders.Api.Features.Products;
 using Orders.Api.Infrastructure;
+using System.Diagnostics;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -58,6 +59,7 @@ builder.Services.AddOpenTelemetry()
         serviceName:    "orders-api",
         serviceVersion: "1.0.0"))
     .WithTracing(tracing => tracing
+        .AddSource("Orders.Api.OutboxPublisher")  // ← must be here
         .AddAspNetCoreInstrumentation(o =>
         {
             o.RecordException = true;
