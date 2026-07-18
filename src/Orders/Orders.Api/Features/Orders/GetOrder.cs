@@ -9,6 +9,9 @@ public static class GetOrder
 
     public static async Task<IResult> Handle(int id, OrdersDbContext db)
     {
+        //// DELIBERATE SLOW PATH — for observability exercise
+        //await Task.Delay(2000);
+
         var order = await db.Orders
             .AsNoTracking()
             .Include(o => o.Items)

@@ -165,7 +165,7 @@ docs/
 - ✅ Week 1 — Core domain service (Orders API, EF Core, Docker, CI)
 - ✅ Week 2 — Auth (IdentityServer, Gateway, YARP, JWT validation)
 - ✅ Week 3 — Messaging (RabbitMQ, Outbox pattern, Notification Worker, Testcontainers)
-- 🚧 Week 4 — Observability (OpenTelemetry, Jaeger, Prometheus, Grafana)
+- ✅ Week 4 — Observability (OpenTelemetry, Jaeger traces, Prometheus metrics, Grafana dashboards, RabbitMQ trace propagation)
 - ⬜ Week 5 — CQRS read model
 - ⬜ Week 6 — IaC (Bicep, Azure Container Apps)
 - ⬜ Week 7 — Full Azure deployment + security scanning
