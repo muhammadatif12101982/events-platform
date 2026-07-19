@@ -52,6 +52,7 @@ var rabbitSettings = builder.Configuration
 
 builder.Services.AddSingleton(rabbitSettings);
 builder.Services.AddHostedService<OutboxPublisher>();
+builder.Services.AddHostedService<OrderProjection>();
 
 // ── OpenTelemetry ──────────────────────────────────────────────────
 builder.Services.AddOpenTelemetry()
@@ -60,6 +61,7 @@ builder.Services.AddOpenTelemetry()
         serviceVersion: "1.0.0"))
     .WithTracing(tracing => tracing
         .AddSource("Orders.Api.OutboxPublisher")  // ← must be here
+        .AddSource("Orders.Api.OrderProjection")  // ← add this
         .AddAspNetCoreInstrumentation(o =>
         {
             o.RecordException = true;
@@ -74,6 +76,7 @@ builder.Services.AddOpenTelemetry()
     .WithMetrics(metrics => metrics
         .AddAspNetCoreInstrumentation()
         .AddHttpClientInstrumentation()
+        .AddMeter("Orders.Api.OrderProjection")  // ← add this
         .AddPrometheusExporter());
 
 var app = builder.Build();
@@ -97,4 +100,7 @@ app.MapPost("/orders", CreateOrder.Handle)
 app.MapGet("/orders/{id:int}", GetOrder.Handle)
     .RequireAuthorization("orders.read");
 
+app.MapGet("/orders/{id:int}/summary", GetOrderSummary.Handle)
+    .RequireAuthorization("orders.read");
+    
 app.Run();

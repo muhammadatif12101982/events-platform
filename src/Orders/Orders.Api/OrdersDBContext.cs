@@ -11,6 +11,7 @@ public class OrdersDbContext(DbContextOptions<OrdersDbContext> options)
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+    public DbSet<OrderSummary> OrderSummaries => Set<OrderSummary>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -28,5 +29,12 @@ public class OrdersDbContext(DbContextOptions<OrdersDbContext> options)
         
         modelBuilder.Entity<OutboxMessage>()
             .HasIndex(o => o.ProcessedAt);
+
+        modelBuilder.Entity<OrderSummary>()
+        .HasIndex(o => o.OrderId)
+        .IsUnique();
+
+        modelBuilder.Entity<OrderSummary>()
+            .HasIndex(o => o.CustomerId);
     }
 }
